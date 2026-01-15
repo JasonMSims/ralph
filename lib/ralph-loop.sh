@@ -47,9 +47,11 @@ for ((i=1; i<=MAX_ITERATIONS; i++)); do
     echo "$(blue '=========================================')"
     echo ""
 
-    # Run single iteration
+    # Run single iteration (disable set -e to capture exit code)
+    set +e
     "$(dirname "$0")/ralph-run.sh"
     EXIT_CODE=$?
+    set -e
 
     case $EXIT_CODE in
         0)
