@@ -49,7 +49,14 @@ ralph watch         # Tail current log
 ## Usage
 
 ```
-ralph <command> [options]
+ralph [options] <command> [command-options]
+
+OPTIONS
+    --mode <mode>           Execution mode: direct (default) or sandbox
+    --permission-mode <m>   Claude permission: acceptEdits (default)
+    --task-file <file>      Task file name (default: tasks.json)
+    --project-dir <dir>     Project directory (default: current dir)
+    --state-dir <dir>       State directory (default: .ralph/)
 
 COMMANDS
     run                 Run a single iteration
@@ -63,11 +70,13 @@ COMMANDS
     version             Show version
 
 EXAMPLES
-    ralph run               # Run single iteration
-    ralph loop 5            # Run 5 iterations
-    ralph loop 10 10        # Run 10 iterations, 10s delay between
-    ralph status            # Check progress
-    ralph watch             # Tail current log
+    ralph run                       # Run single iteration
+    ralph --mode sandbox run        # Run in sandbox mode
+    ralph --task-file my.json run   # Use custom task file
+    ralph loop 5                    # Run 5 iterations
+    ralph loop 10 10                # Run 10 iterations, 10s delay
+    ralph status                    # Check progress
+    ralph watch                     # Tail current log
 ```
 
 ## Task File Format (tasks.json)
@@ -104,15 +113,15 @@ Tasks are executed in order. When Claude completes a task, it sets `completed: t
 
 ## Configuration
 
-Environment variables:
+All options can be set via command-line flags or environment variables. Flags take precedence over environment variables.
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `RALPH_MODE` | `direct` | Execution mode: `direct` or `sandbox` |
-| `RALPH_PERMISSION_MODE` | `acceptEdits` | Claude permission mode |
-| `RALPH_TASK_FILE` | `tasks.json` | Task file name |
-| `RALPH_PROJECT_DIR` | Current dir | Project directory |
-| `RALPH_STATE_DIR` | `.ralph/` | State directory |
+| Flag | Environment Variable | Default | Description |
+|------|---------------------|---------|-------------|
+| `--mode` | `RALPH_MODE` | `direct` | Execution mode: `direct` or `sandbox` |
+| `--permission-mode` | `RALPH_PERMISSION_MODE` | `acceptEdits` | Claude permission mode |
+| `--task-file` | `RALPH_TASK_FILE` | `tasks.json` | Task file name |
+| `--project-dir` | `RALPH_PROJECT_DIR` | Current dir | Project directory |
+| `--state-dir` | `RALPH_STATE_DIR` | `.ralph/` | State directory |
 
 ## State Files
 

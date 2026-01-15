@@ -7,6 +7,59 @@ set -e
 RALPH_BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
 RALPH_LIB_DIR="${RALPH_BIN_DIR}/lib"
 
+# Parse global flags before sourcing config
+# This allows flags to override environment variables
+POSITIONAL_ARGS=()
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --mode=*)
+            export RALPH_MODE="${1#*=}"
+            shift
+            ;;
+        --mode)
+            export RALPH_MODE="$2"
+            shift 2
+            ;;
+        --permission-mode=*)
+            export RALPH_PERMISSION_MODE="${1#*=}"
+            shift
+            ;;
+        --permission-mode)
+            export RALPH_PERMISSION_MODE="$2"
+            shift 2
+            ;;
+        --task-file=*)
+            export RALPH_TASK_FILE="${1#*=}"
+            shift
+            ;;
+        --task-file)
+            export RALPH_TASK_FILE="$2"
+            shift 2
+            ;;
+        --project-dir=*)
+            export RALPH_PROJECT_DIR="${1#*=}"
+            shift
+            ;;
+        --project-dir)
+            export RALPH_PROJECT_DIR="$2"
+            shift 2
+            ;;
+        --state-dir=*)
+            export RALPH_STATE_DIR="${1#*=}"
+            shift
+            ;;
+        --state-dir)
+            export RALPH_STATE_DIR="$2"
+            shift 2
+            ;;
+        *)
+            POSITIONAL_ARGS+=("$1")
+            shift
+            ;;
+    esac
+done
+set -- "${POSITIONAL_ARGS[@]}"
+
 source "${RALPH_LIB_DIR}/config.sh"
 
 # Colors (redefined for local use)
@@ -25,7 +78,7 @@ show_help() {
     echo -e "${BOLD}ralph${NC} - Autonomous task execution orchestrator for Claude"
     echo ""
     echo -e "${BOLD}USAGE${NC}"
-    echo "    ralph <command> [options]"
+    echo "    ralph [options] <command> [command-options]"
     echo ""
     echo -e "${BOLD}COMMANDS${NC}"
     echo -e "    ${CYAN}run${NC}                 Run a single iteration"
@@ -39,27 +92,34 @@ show_help() {
     echo -e "    ${CYAN}help${NC}                Show this help message"
     echo -e "    ${CYAN}version${NC}             Show version"
     echo ""
+    echo -e "${BOLD}OPTIONS${NC}"
+    echo "    --mode <mode>           Execution mode: direct (default) or sandbox"
+    echo "    --permission-mode <m>   Claude permission: acceptEdits (default)"
+    echo "    --task-file <file>      Task file name (default: tasks.json)"
+    echo "    --project-dir <dir>     Project directory (default: current dir)"
+    echo "    --state-dir <dir>       State directory (default: .ralph/)"
+    echo ""
     echo -e "${BOLD}EXAMPLES${NC}"
-    echo "    ralph run               # Run single iteration"
-    echo "    ralph loop 5            # Run 5 iterations"
-    echo "    ralph loop 10 10        # Run 10 iterations, 10s delay between"
-    echo "    ralph status            # Check progress"
-    echo "    ralph watch             # Tail current log"
-    echo "    ralph watch session     # Watch session state changes"
+    echo "    ralph run                       # Run single iteration"
+    echo "    ralph --mode sandbox run        # Run in sandbox mode"
+    echo "    ralph --task-file my.json run   # Use custom task file"
+    echo "    ralph loop 5                    # Run 5 iterations"
+    echo "    ralph loop 10 10                # Run 10 iterations, 10s delay"
+    echo "    ralph status                    # Check progress"
+    echo "    ralph watch                     # Tail current log"
     echo ""
     echo -e "${BOLD}ENVIRONMENT${NC}"
-    echo "    RALPH_MODE              Execution mode: direct (default) or sandbox"
-    echo "    RALPH_PERMISSION_MODE   Claude permission: acceptEdits (default)"
-    echo "    RALPH_TASK_FILE         Task file name (default: PRD.json)"
-    echo "    RALPH_PROJECT_DIR       Project directory (default: current dir)"
-    echo "    RALPH_STATE_DIR         State directory (default: .ralph/)"
+    echo "    Options can also be set via environment variables:"
+    echo "    RALPH_MODE, RALPH_PERMISSION_MODE, RALPH_TASK_FILE,"
+    echo "    RALPH_PROJECT_DIR, RALPH_STATE_DIR"
+    echo "    (Command-line flags take precedence over environment variables)"
     echo ""
     echo -e "${BOLD}FILES${NC}"
     echo "    .ralph/session.json     Current session state"
     echo "    .ralph/current-task.md  Current task details"
     echo "    .ralph/logs/            Iteration log files"
     echo "    .ralph/ralph.lock       Lock file (prevents concurrent runs)"
-    echo "    PRD.json                Task definitions"
+    echo "    tasks.json              Task definitions"
 }
 
 show_version() {
