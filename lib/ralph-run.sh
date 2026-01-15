@@ -37,16 +37,29 @@ ITERATION=$(echo "$SESSION" | jq -r '.iteration')
 TOTAL_TASKS=$(echo "$SESSION" | jq -r '.total_tasks')
 COMPLETED_TASKS=$(echo "$SESSION" | jq -r '.completed_tasks')
 
-# Check if all tasks are complete
+# Check if all tasks are complete or current task is already done
+# Always derive from tasks.json to handle cases where task was completed
+# but COMPLETE wasn't signaled (e.g., verification failed, no signal output)
 if [ "$CURRENT_TASK_INDEX" = "null" ] || [ -z "$CURRENT_TASK_INDEX" ]; then
-    # Re-check PRD for any remaining tasks
     NEXT_TASK_INDEX=$(get_next_incomplete_task_index)
-    if [ -z "$NEXT_TASK_INDEX" ]; then
-        echo "$(green 'All tasks complete!')"
-        exit 2
+else
+    # Check if current task is already marked complete in tasks.json
+    CURRENT_TASK_COMPLETED=$(jq -r ".tasks[$CURRENT_TASK_INDEX].completed" "${PRD_FILE}")
+    if [ "$CURRENT_TASK_COMPLETED" = "true" ]; then
+        echo "$(yellow 'Current task already completed in tasks.json, finding next...')"
+        NEXT_TASK_INDEX=$(get_next_incomplete_task_index)
+    else
+        NEXT_TASK_INDEX=$CURRENT_TASK_INDEX
     fi
-    CURRENT_TASK_INDEX=$NEXT_TASK_INDEX
 fi
+
+if [ -z "$NEXT_TASK_INDEX" ]; then
+    echo "$(green 'All tasks complete!')"
+    update_session "current_task_index" "null"
+    exit 2
+fi
+
+CURRENT_TASK_INDEX=$NEXT_TASK_INDEX
 
 # Get current task details
 TASK=$(get_task_by_index "$CURRENT_TASK_INDEX")
