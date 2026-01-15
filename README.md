@@ -6,7 +6,7 @@ Ralph breaks down work into discrete tasks defined in a JSON file and orchestrat
 
 ## Features
 
-- **Task-based execution**: Define tasks in a PRD.json file, Ralph executes them sequentially
+- **Task-based execution**: Define tasks in a tasks.json file, Ralph executes them sequentially
 - **Fresh agent per iteration**: Each task gets a new Claude instance with full context
 - **Real-time visibility**: Stream Claude's work with formatted, colorized output
 - **State persistence**: Resume sessions, track progress, maintain audit logs
@@ -32,7 +32,7 @@ ln -s ~/Code/ralph/ralph /usr/local/bin/ralph
 # Navigate to your project
 cd my-project
 
-# Create a PRD.json with your tasks (see format below)
+# Create a tasks.json with your tasks (see format below)
 
 # Initialize ralph
 ralph init
@@ -70,12 +70,12 @@ EXAMPLES
     ralph watch             # Tail current log
 ```
 
-## Task File Format (PRD.json)
+## Task File Format (tasks.json)
 
 ```json
 {
   "name": "My Project Tasks",
-  "testCases": [
+  "tasks": [
     {
       "category": "setup",
       "description": "Initialize project structure",
@@ -84,7 +84,7 @@ EXAMPLES
         "Add package.json",
         "Configure TypeScript"
       ],
-      "passes": false
+      "completed": false
     },
     {
       "category": "feature",
@@ -94,13 +94,13 @@ EXAMPLES
         "Add login endpoint",
         "Add tests"
       ],
-      "passes": false
+      "completed": false
     }
   ]
 }
 ```
 
-Tasks are executed in order. When Claude completes a task, it sets `passes: true` and ralph moves to the next incomplete task.
+Tasks are executed in order. When Claude completes a task, it sets `completed: true` and ralph moves to the next incomplete task.
 
 ## Configuration
 
@@ -110,7 +110,7 @@ Environment variables:
 |----------|---------|-------------|
 | `RALPH_MODE` | `direct` | Execution mode: `direct` or `sandbox` |
 | `RALPH_PERMISSION_MODE` | `acceptEdits` | Claude permission mode |
-| `RALPH_TASK_FILE` | `PRD.json` | Task file name |
+| `RALPH_TASK_FILE` | `tasks.json` | Task file name |
 | `RALPH_PROJECT_DIR` | Current dir | Project directory |
 | `RALPH_STATE_DIR` | `.ralph/` | State directory |
 
@@ -129,7 +129,7 @@ Ralph stores state in `.ralph/` (hidden directory in project root):
 
 ## How It Works
 
-1. **Initialize**: Ralph reads PRD.json and creates a session
+1. **Initialize**: Ralph reads tasks.json and creates a session
 2. **Prepare task**: Generates current-task.md with task details
 3. **Execute**: Invokes Claude with the task, streaming output
 4. **Parse result**: Looks for `<task>COMPLETE</task>` or `<task>BLOCKED:reason</task>`
