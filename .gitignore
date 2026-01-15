@@ -1,0 +1,10 @@
+# State directory (created in project being run)
+.ralph/
+
+# macOS
+.DS_Store
+
+# Editor files
+*.swp
+*.swo
+*~

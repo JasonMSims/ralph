@@ -1,0 +1,181 @@
+#!/bin/bash
+# Ralph - Autonomous task execution orchestrator for Claude
+# https://github.com/JasonMSims/ralph
+
+set -e
+
+RALPH_BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
+RALPH_LIB_DIR="${RALPH_BIN_DIR}/lib"
+
+source "${RALPH_LIB_DIR}/config.sh"
+
+# Colors (redefined for local use)
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+DIM='\033[0;90m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+VERSION="1.0.0"
+
+show_help() {
+    echo -e "${BOLD}ralph${NC} - Autonomous task execution orchestrator for Claude"
+    echo ""
+    echo -e "${BOLD}USAGE${NC}"
+    echo "    ralph <command> [options]"
+    echo ""
+    echo -e "${BOLD}COMMANDS${NC}"
+    echo -e "    ${CYAN}run${NC}                 Run a single iteration"
+    echo -e "    ${CYAN}loop${NC} [n] [delay]    Run n iterations (default: 10, delay: 5s)"
+    echo -e "    ${CYAN}status${NC}              Show current session status"
+    echo -e "    ${CYAN}watch${NC} [mode]        Watch logs in real-time"
+    echo "                        Modes: latest (default), session, all"
+    echo -e "    ${CYAN}init${NC}                Initialize or reset session"
+    echo -e "    ${CYAN}unlock${NC} [--force]    Remove lock file"
+    echo -e "    ${CYAN}clean${NC} [n|--all]     Clean up old logs (keep n, default: 5)"
+    echo -e "    ${CYAN}help${NC}                Show this help message"
+    echo -e "    ${CYAN}version${NC}             Show version"
+    echo ""
+    echo -e "${BOLD}EXAMPLES${NC}"
+    echo "    ralph run               # Run single iteration"
+    echo "    ralph loop 5            # Run 5 iterations"
+    echo "    ralph loop 10 10        # Run 10 iterations, 10s delay between"
+    echo "    ralph status            # Check progress"
+    echo "    ralph watch             # Tail current log"
+    echo "    ralph watch session     # Watch session state changes"
+    echo ""
+    echo -e "${BOLD}ENVIRONMENT${NC}"
+    echo "    RALPH_MODE              Execution mode: direct (default) or sandbox"
+    echo "    RALPH_PERMISSION_MODE   Claude permission: acceptEdits (default)"
+    echo "    RALPH_TASK_FILE         Task file name (default: PRD.json)"
+    echo "    RALPH_PROJECT_DIR       Project directory (default: current dir)"
+    echo "    RALPH_STATE_DIR         State directory (default: .ralph/)"
+    echo ""
+    echo -e "${BOLD}FILES${NC}"
+    echo "    .ralph/session.json     Current session state"
+    echo "    .ralph/current-task.md  Current task details"
+    echo "    .ralph/logs/            Iteration log files"
+    echo "    .ralph/ralph.lock       Lock file (prevents concurrent runs)"
+    echo "    PRD.json                Task definitions"
+}
+
+show_version() {
+    echo "ralph version ${VERSION}"
+}
+
+cmd_run() {
+    exec "${RALPH_LIB_DIR}/ralph-run.sh" "$@"
+}
+
+cmd_loop() {
+    exec "${RALPH_LIB_DIR}/ralph-loop.sh" "$@"
+}
+
+cmd_status() {
+    exec "${RALPH_LIB_DIR}/ralph-status.sh" "$@"
+}
+
+cmd_watch() {
+    exec "${RALPH_LIB_DIR}/ralph-watch.sh" "$@"
+}
+
+cmd_init() {
+    exec "${RALPH_LIB_DIR}/ralph-init.sh" "$@"
+}
+
+cmd_unlock() {
+    exec "${RALPH_LIB_DIR}/ralph-unlock.sh" "$@"
+}
+
+cmd_clean() {
+    echo -e "${BLUE}=== Cleaning Ralph Logs ===${NC}"
+    echo ""
+
+    if [ ! -d "${LOGS_DIR}" ]; then
+        echo "No logs directory found"
+        exit 0
+    fi
+
+    LOG_COUNT=$(find "${LOGS_DIR}" -name "*.log" 2>/dev/null | wc -l | tr -d ' ')
+
+    if [ "$LOG_COUNT" -eq 0 ]; then
+        echo "No log files to clean"
+        exit 0
+    fi
+
+    TOTAL_SIZE=$(du -sh "${LOGS_DIR}" 2>/dev/null | cut -f1)
+    echo "Found ${LOG_COUNT} log files (${TOTAL_SIZE})"
+    echo ""
+
+    KEEP_RECENT="${1:-5}"
+
+    if [ "$1" = "--all" ]; then
+        echo -e "${YELLOW}Removing ALL log files...${NC}"
+        rm -f "${LOGS_DIR}"/*.log
+        echo -e "${GREEN}Done${NC}"
+    else
+        echo "Keeping ${KEEP_RECENT} most recent logs"
+        echo ""
+
+        FILES_TO_DELETE=$(ls -t "${LOGS_DIR}"/*.log 2>/dev/null | tail -n +$((KEEP_RECENT + 1)))
+
+        if [ -z "$FILES_TO_DELETE" ]; then
+            echo "Nothing to clean (${LOG_COUNT} <= ${KEEP_RECENT})"
+            exit 0
+        fi
+
+        DELETE_COUNT=$(echo "$FILES_TO_DELETE" | wc -l | tr -d ' ')
+        echo -e "${YELLOW}Removing ${DELETE_COUNT} old log files...${NC}"
+
+        echo "$FILES_TO_DELETE" | xargs rm -f
+
+        echo -e "${GREEN}Done${NC}"
+
+        REMAINING=$(find "${LOGS_DIR}" -name "*.log" 2>/dev/null | wc -l | tr -d ' ')
+        echo ""
+        echo "Remaining: ${REMAINING} log files"
+    fi
+}
+
+# Parse command
+COMMAND="${1:-help}"
+shift 2>/dev/null || true
+
+case "$COMMAND" in
+    run|r)
+        cmd_run "$@"
+        ;;
+    loop|l)
+        cmd_loop "$@"
+        ;;
+    status|s|st)
+        cmd_status "$@"
+        ;;
+    watch|w)
+        cmd_watch "$@"
+        ;;
+    init|i)
+        cmd_init "$@"
+        ;;
+    unlock|u)
+        cmd_unlock "$@"
+        ;;
+    clean|c)
+        cmd_clean "$@"
+        ;;
+    help|h|--help|-h)
+        show_help
+        ;;
+    version|v|--version|-v)
+        show_version
+        ;;
+    *)
+        echo -e "${RED}Unknown command: ${COMMAND}${NC}"
+        echo ""
+        echo "Run 'ralph help' for usage"
+        exit 1
+        ;;
+esac
