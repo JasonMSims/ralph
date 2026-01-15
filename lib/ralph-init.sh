@@ -9,9 +9,9 @@ echo "$(blue '=== Initializing Ralph Session ===')"
 # Ensure state directories exist
 ensure_state_dirs
 
-# Check if PRD exists
+# Check if task file exists
 if [ ! -f "${PRD_FILE}" ]; then
-    echo "$(red 'Error: PRD.json not found at')" "${PRD_FILE}"
+    echo "$(red 'Error: Task file not found at')" "${PRD_FILE}"
     exit 1
 fi
 
@@ -41,7 +41,8 @@ cat > "${SESSION_FILE}" << EOF
   "completed_tasks": ${COMPLETED_TASKS},
   "last_iteration_at": null,
   "last_result": null,
-  "blockers": []
+  "blockers": [],
+  "failed_attempts": []
 }
 EOF
 

@@ -14,8 +14,8 @@ RALPH_MODE="${RALPH_MODE:-direct}"
 # Permission mode for Claude
 RALPH_PERMISSION_MODE="${RALPH_PERMISSION_MODE:-acceptEdits}"
 
-# Task file (default: PRD.json in current directory)
-RALPH_TASK_FILE="${RALPH_TASK_FILE:-PRD.json}"
+# Task file (default: tasks.json in current directory)
+RALPH_TASK_FILE="${RALPH_TASK_FILE:-tasks.json}"
 
 # ============================================================================
 # Paths
@@ -65,20 +65,20 @@ get_timestamp() {
 # ============================================================================
 
 get_total_tasks() {
-    jq '.testCases | length' "${PRD_FILE}"
+    jq '.tasks | length' "${PRD_FILE}"
 }
 
 get_completed_tasks() {
-    jq '[.testCases[] | select(.passes == true)] | length' "${PRD_FILE}"
+    jq '[.tasks[] | select(.completed == true)] | length' "${PRD_FILE}"
 }
 
 get_next_incomplete_task_index() {
-    jq '.testCases | to_entries | .[] | select(.value.passes != true) | .key' "${PRD_FILE}" | head -1
+    jq '.tasks | to_entries | .[] | select(.value.completed != true) | .key' "${PRD_FILE}" | head -1
 }
 
 get_task_by_index() {
     local index=$1
-    jq ".testCases[$index]" "${PRD_FILE}"
+    jq ".tasks[$index]" "${PRD_FILE}"
 }
 
 # ============================================================================
@@ -171,3 +171,111 @@ red() { echo -e "\033[0;31m$1\033[0m"; }
 green() { echo -e "\033[0;32m$1\033[0m"; }
 yellow() { echo -e "\033[0;33m$1\033[0m"; }
 blue() { echo -e "\033[0;34m$1\033[0m"; }
+
+# ============================================================================
+# Test Verification
+# ============================================================================
+
+# Check if tests passed in log file
+# Returns 0 if tests passed, 1 if tests failed, 2 if no test output found
+verify_tests_passed() {
+    local log_file="$1"
+
+    # Check for common test failure patterns
+    # Vitest/Jest failures
+    if grep -qE "(FAIL|Failed|failed)\s+.*\.(test|spec)\.(ts|js|tsx|jsx)" "$log_file" 2>/dev/null; then
+        return 1
+    fi
+
+    # Vitest summary showing failures
+    if grep -qE "Tests?\s+[0-9]+\s+failed" "$log_file" 2>/dev/null; then
+        return 1
+    fi
+
+    # Jest/Vitest red X failures
+    if grep -qE "✗|✕|×" "$log_file" 2>/dev/null && grep -qE "(test|spec|describe|it)\(" "$log_file" 2>/dev/null; then
+        return 1
+    fi
+
+    # Check for test success patterns
+    # Vitest/Jest success
+    if grep -qE "(PASS|passed|✓|✔)" "$log_file" 2>/dev/null && grep -qE "(test|spec)" "$log_file" 2>/dev/null; then
+        return 0
+    fi
+
+    # Vitest "All tests passed" or similar
+    if grep -qiE "(all.*tests.*pass|tests.*passed|test.*pass)" "$log_file" 2>/dev/null; then
+        return 0
+    fi
+
+    # No test output detected
+    return 2
+}
+
+# Check if type checks passed in log file
+# Returns 0 if passed, 1 if failed, 2 if no type check output found
+verify_typecheck_passed() {
+    local log_file="$1"
+
+    # TypeScript errors
+    if grep -qE "error TS[0-9]+:" "$log_file" 2>/dev/null; then
+        return 1
+    fi
+
+    # tsc errors
+    if grep -qE "Found [1-9][0-9]* errors?" "$log_file" 2>/dev/null; then
+        return 1
+    fi
+
+    # Bun type check failures
+    if grep -qE "type.*(error|Error)" "$log_file" 2>/dev/null; then
+        return 1
+    fi
+
+    # Check for success patterns
+    if grep -qiE "(no.*errors|0 errors|type.*check.*pass|tsc.*success)" "$log_file" 2>/dev/null; then
+        return 0
+    fi
+
+    # No type check output detected
+    return 2
+}
+
+# Comprehensive build verification
+# Returns 0 if all checks pass, 1 if any check fails
+verify_build_passed() {
+    local log_file="$1"
+    local strict="${2:-false}"
+
+    local test_result
+    local typecheck_result
+
+    verify_tests_passed "$log_file"
+    test_result=$?
+
+    verify_typecheck_passed "$log_file"
+    typecheck_result=$?
+
+    # If tests explicitly failed, reject
+    if [ $test_result -eq 1 ]; then
+        echo "tests_failed"
+        return 1
+    fi
+
+    # If type check explicitly failed, reject
+    if [ $typecheck_result -eq 1 ]; then
+        echo "typecheck_failed"
+        return 1
+    fi
+
+    # In strict mode, require evidence of passing (not just absence of failure)
+    if [ "$strict" = "true" ]; then
+        if [ $test_result -eq 2 ] && [ $typecheck_result -eq 2 ]; then
+            echo "no_verification_found"
+            return 1
+        fi
+    fi
+
+    echo "passed"
+    return 0
+}

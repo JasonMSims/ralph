@@ -55,7 +55,7 @@ TASK_DESCRIPTION=$(echo "$TASK" | jq -r '.description')
 TASK_STEPS=$(echo "$TASK" | jq -r '.steps | to_entries | map("\(.key + 1). \(.value)") | join("\n")')
 
 # Get completed tasks for context
-COMPLETED_SUMMARY=$(jq -r '[.testCases | to_entries[] | select(.value.passes == true) | "- \(.value.category): \(.value.description)"] | join("\n")' "${PRD_FILE}")
+COMPLETED_SUMMARY=$(jq -r '[.tasks | to_entries[] | select(.value.completed == true) | "- \(.value.category): \(.value.description)"] | join("\n")' "${PRD_FILE}")
 
 # Generate current-task.md
 cat > "${CURRENT_TASK_FILE}" << EOF
@@ -77,7 +77,7 @@ ${COMPLETED_SUMMARY}
 - Focus ONLY on this task
 - Run tests after implementation (\`bun test\` or \`bunx vitest run\`)
 - Run type checks (\`bun run check\`)
-- When tests and checks pass, update PRD.json to set this task's \`passes\` field to \`true\`
+- When tests and checks pass, update tasks.json to set this task's \`completed\` field to \`true\`
 - Append your progress summary to progress.txt
 - Commit your changes with a descriptive message
 - Output \`<task>COMPLETE</task>\` when done
@@ -110,13 +110,13 @@ echo ""
 
 # Build the prompt
 # Use relative paths from project dir so @ references work
-PROMPT="@.ralph/current-task.md @PRD.json @CLAUDE.md
+PROMPT="@.ralph/current-task.md @${RALPH_TASK_FILE} @CLAUDE.md
 Read current-task.md for your specific task assignment.
 
 Your job:
 1. Implement the task described in current-task.md
 2. Run tests (\`bunx vitest run\`) and type checks (\`bun run check\`)
-3. When all tests pass, update PRD.json: set the \`passes\` field to \`true\` for task index ${CURRENT_TASK_INDEX}
+3. When all tests pass, update tasks.json: set the \`completed\` field to \`true\` for task index ${CURRENT_TASK_INDEX}
 4. Append a brief progress summary to progress.txt
 5. Commit your changes with a descriptive message
 
@@ -148,7 +148,44 @@ echo "$(blue '=== Iteration')" "${NEW_ITERATION} $(blue 'Complete ===')"
 
 # Parse the result from the log
 if grep -q "<task>COMPLETE</task>" "$LOG_FILE"; then
+    # Verify tests/build actually passed before accepting completion
+    VERIFY_RESULT=$(verify_build_passed "$LOG_FILE")
+    VERIFY_EXIT=$?
+
+    if [ $VERIFY_EXIT -ne 0 ]; then
+        case "$VERIFY_RESULT" in
+            "tests_failed")
+                echo "$(red 'Task signaled COMPLETE but tests failed!')"
+                echo "$(yellow 'Rejecting completion - tests must pass')"
+                ;;
+            "typecheck_failed")
+                echo "$(red 'Task signaled COMPLETE but type check failed!')"
+                echo "$(yellow 'Rejecting completion - type checks must pass')"
+                ;;
+            *)
+                echo "$(yellow 'Task signaled COMPLETE but verification inconclusive')"
+                echo "$(yellow 'Accepting completion (no explicit failures detected)')"
+                # Fall through to accept - only reject on explicit failures
+                VERIFY_EXIT=0
+                ;;
+        esac
+
+        if [ $VERIFY_EXIT -ne 0 ]; then
+            update_session "last_result" "REJECTED:${VERIFY_RESULT}"
+
+            # Track the failed verification attempt
+            jq --arg reason "$VERIFY_RESULT" --arg timestamp "$(get_timestamp)" --arg task "$TASK_DESCRIPTION" \
+                '.failed_attempts = (.failed_attempts // []) + [{"task": $task, "reason": $reason, "at": $timestamp}]' \
+                "${SESSION_FILE}" > "${SESSION_FILE}.tmp"
+            mv "${SESSION_FILE}.tmp" "${SESSION_FILE}"
+
+            # Don't advance to next task - let next iteration retry
+            exit 0
+        fi
+    fi
+
     echo "$(green 'Task completed successfully!')"
+    echo "$(green '✓ Build verification passed')"
     update_session "last_result" "COMPLETE"
 
     # Update completed count and find next task

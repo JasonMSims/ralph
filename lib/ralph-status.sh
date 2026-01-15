@@ -36,14 +36,14 @@ fi
 
 echo ""
 
-# PRD Progress
+# Task Progress
 if [ -f "${PRD_FILE}" ]; then
     TOTAL=$(get_total_tasks)
     COMPLETED=$(get_completed_tasks)
     REMAINING=$((TOTAL - COMPLETED))
     PERCENT=$((COMPLETED * 100 / TOTAL))
 
-    echo "$(blue 'PRD Progress:')"
+    echo "$(blue 'Task Progress:')"
     echo "  Completed: ${COMPLETED}/${TOTAL} (${PERCENT}%)"
     echo "  Remaining: ${REMAINING}"
 
@@ -56,7 +56,7 @@ if [ -f "${PRD_FILE}" ]; then
     printf '%*s' "$EMPTY" | tr ' ' '-'
     printf "]\n"
 else
-    echo "$(red 'PRD.json not found')"
+    echo "$(red 'Task file not found')"
 fi
 
 echo ""
@@ -78,6 +78,16 @@ if [ -f "${SESSION_FILE}" ]; then
     if [ "$BLOCKERS" -gt 0 ]; then
         echo "$(red 'Blockers:')"
         jq -r '.blockers[] | "  - \(.at): \(.reason)"' "${SESSION_FILE}"
+        echo ""
+    fi
+fi
+
+# Failed verification attempts
+if [ -f "${SESSION_FILE}" ]; then
+    FAILED_ATTEMPTS=$(jq -r '.failed_attempts // [] | length' "${SESSION_FILE}")
+    if [ "$FAILED_ATTEMPTS" -gt 0 ]; then
+        echo "$(yellow 'Failed Verifications:') (${FAILED_ATTEMPTS} attempts rejected)"
+        jq -r '.failed_attempts[-3:][] | "  - \(.at): \(.task) [\(.reason)]"' "${SESSION_FILE}"
         echo ""
     fi
 fi
